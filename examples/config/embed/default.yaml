@@ -1,0 +1,28 @@
+# Default configuration for the application
+server:
+  host: "127.0.0.1"  # Server host address
+  port: 8080         # Server port
+  tls: false         # TLS/SSL setting
+
+database:
+  type: "postgres"   # Database type
+  name: "mydb"       # Database name (from CommonDBConfig)
+  username: "dbuser" # Database username (from CommonDBConfig)
+  password: "dbpass" # Database password (from CommonDBConfig)
+  timeout: "10s"     # Database timeout (from CommonDBConfig)
+  host: "localhost"  # Database host
+  port: 5432         # Database port
+
+auth:
+  provider: "jwt"    # Authentication provider
+  jwt:
+    secret: "change-me-in-production"  # JWT secret
+  # oauth configuration only needed when provider is oauth
+  oauth:
+    clientID: ""
+    clientSecret: ""
+
+logging:
+  level: "info"      # Logging level
+  output: "stdout"   # Logging output (stdout, file)
+  path: ""           # Log file path when output is file

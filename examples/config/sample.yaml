@@ -1,0 +1,26 @@
+# Custom configuration example
+# Only override settings that need to be changed
+
+# Server configuration
+server:
+  host: "0.0.0.0"  # Listen on all interfaces
+  port: 9090       # Use a different port
+  tls: true        # Enable TLS
+
+# Database configuration - using SQLite
+database:
+  type: "sqlite"   # Switch to SQLite
+  name: "/var/lib/myapp/data.db"
+
+# Authentication configuration
+auth:
+  provider: "oauth"  # Use OAuth for authentication
+  oauth:
+    clientID: "example-client-id"
+    clientSecret: "example-client-secret"
+
+# Logging configuration - output to file
+logging:
+  level: "warn"
+  output: "file"
+  path: "/var/log/myapp.log" 
