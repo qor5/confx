@@ -1,4 +1,4 @@
-# confx - Configuration Management Library for Go
+# confx
 
 confx is a feature-rich configuration management library for Go that provides a comprehensive solution for handling application configuration. It combines command line arguments, environment variables, configuration files, and default values to help developers efficiently manage application configuration.
 
