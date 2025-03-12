@@ -35,31 +35,31 @@ The configuration is organized into the following sections:
 1. Show help
 
    ```bash
-     go run main.go -h
+   go run *.go -h
    ```
 
 2. Run with default configuration:
 
    ```bash
-   go run main.go
+   go run *.go
    ```
 
 3. Run with custom configuration file:
 
    ```bash
-   go run main.go --config ../config/sample.yaml
+   go run *.go --config ../config/sample.yaml
    ```
 
 4. Override specific values via command line:
 
    ```bash
-   go run main.go --server-port 9090 --auth-provider oauth --auth-oauth-client-id "my-client" --auth-oauth-client-secret "my-secret"
+   go run *.go --server-port 9090 --auth-provider oauth --auth-oauth-client-id "my-client" --auth-oauth-client-secret "my-secret"
    ```
 
 5. Override specific values via environment variables:
 
    ```bash
-   APP_SERVER_PORT=9090 APP_AUTH_PROVIDER=oauth APP_AUTH_OAUTH_CLIENT_ID="ev-client" APP_AUTH_OAUTH_CLIENT_SECRET="ev-secret" go run main.go
+   APP_SERVER_PORT=9090 APP_AUTH_PROVIDER=oauth APP_AUTH_OAUTH_CLIENT_ID="ev-client" APP_AUTH_OAUTH_CLIENT_SECRET="ev-secret" go run *.go
    ```
 
 ## Conditional Validation Examples
