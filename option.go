@@ -7,6 +7,7 @@ import (
 
 type Option func(opts *initOptions)
 
+// DefaultTagName is the default tag name for struct fields
 var DefaultTagName = "confx"
 
 // DefaultUsageTagName is the default tag name for field usage descriptions

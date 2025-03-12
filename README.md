@@ -106,8 +106,8 @@ func main() {
         log.Fatalf("Failed to initialize config loader: %v", err)
     }
 
-    // Load configuration (optionally specifying a config file path)
-    config, err := loader(context.Background(), "config.yaml")
+    // Load configuration
+    config, err := loader(context.Background(), "")
     if err != nil {
         log.Fatalf("Failed to load config: %v", err)
     }
@@ -126,6 +126,38 @@ confx automatically generates command line flags for each field in your configur
 ```bash
 ./myapp --server-host=127.0.0.1 --server-port=9090 --log-level=debug
 ```
+
+You can also specify a configuration file using the custom flag we added:
+
+```bash
+./myapp --config=production.yaml
+```
+
+Using the `WithFlagSet` option allows you to provide a custom FlagSet, which is particularly useful in the following scenarios:
+
+1. When you need to integrate with an existing command-line argument system
+2. When you want to customize the sorting or grouping of flags
+3. When you need to add additional command-line parameters not related to configuration
+4. When using subcommands in complex applications (such as when used with Cobra)
+
+For example, you can create a custom FlagSet and add extra flags:
+
+```go
+flagSet := pflag.NewFlagSet("myapp", pflag.ContinueOnError)
+flagSet.SortFlags = false
+
+// Add custom flags
+flagSet.StringVar(&configPath, "custom-config-flag", "", "Path to configuration file")
+flagSet.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+
+// Initialize config loader with custom FlagSet
+loader, err := confx.Initialize(defaultConfig, confx.WithFlagSet(flagSet))
+
+// Load configuration
+config, err := loader(context.Background(), configPath)
+```
+
+This allows you to have complete control over how command-line arguments are handled while still leveraging confx's automatic binding functionality.
 
 ### Environment Variables
 

@@ -62,11 +62,6 @@ The configuration is organized into the following sections:
    APP_SERVER_PORT=9090 APP_AUTH_PROVIDER=oauth APP_AUTH_OAUTH_CLIENT_ID="ev-client" APP_AUTH_OAUTH_CLIENT_SECRET="ev-secret" go run main.go
    ```
 
-6. Run the tests:
-   ```bash
-   go test -v
-   ```
-
 ## Conditional Validation Examples
 
 This example demonstrates two types of conditional validation:
