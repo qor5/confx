@@ -44,7 +44,7 @@ type Loader[T any] func(ctx context.Context, path string) (T, error)
 //   - error: An error object if initialization fails.
 func Initialize[T any](def T, options ...Option) (Loader[T], error) {
 	opts := &initOptions{
-		flagSet:       pflag.CommandLine,
+		flagSet:       nil,
 		envPrefix:     "",
 		tagName:       DefaultTagName,
 		usageTagName:  DefaultUsageTagName,
@@ -56,6 +56,13 @@ func Initialize[T any](def T, options ...Option) (Loader[T], error) {
 	}
 	def = clone.Slowly(def).(T)
 
+	var flagConfig string
+	if opts.flagSet == nil {
+		opts.flagSet = pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
+		opts.flagSet.SortFlags = false
+		opts.flagSet.StringVarP(&flagConfig, "config", "c", "", "Path to configuration file")
+	}
+
 	var collectBinds []func() error
 	err := initializeRecursive(opts, reflect.ValueOf(def), "", &collectBinds)
 	if err != nil {
@@ -66,10 +73,13 @@ func Initialize[T any](def T, options ...Option) (Loader[T], error) {
 
 	var once sync.Once
 	var onceErr error
-	return func(ctx context.Context, path string) (T, error) {
+	return func(ctx context.Context, confPath string) (T, error) {
 		once.Do(func() {
 			if !opts.flagSet.Parsed() {
 				if err := opts.flagSet.Parse(os.Args[1:]); err != nil {
+					if errors.Is(err, pflag.ErrHelp) {
+						os.Exit(0)
+					}
 					onceErr = errors.Wrap(err, "failed to parse flags")
 					return
 				}
@@ -87,10 +97,14 @@ func Initialize[T any](def T, options ...Option) (Loader[T], error) {
 			return zero, onceErr
 		}
 
-		if path != "" {
-			opts.viperInstance.SetConfigFile(path)
+		if confPath == "" {
+			confPath = flagConfig
+		}
+
+		if confPath != "" {
+			opts.viperInstance.SetConfigFile(confPath)
 			if err := opts.viperInstance.ReadInConfig(); err != nil {
-				return zero, errors.Wrapf(err, "failed to read config %q", path)
+				return zero, errors.Wrapf(err, "failed to read config %q", confPath)
 			}
 		}
 

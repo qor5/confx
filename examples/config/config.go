@@ -128,5 +128,11 @@ func Initialize(flagSet *pflag.FlagSet, envPrefix string) (confx.Loader[*Config]
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load default config from embedded YAML")
 	}
-	return confx.Initialize(def, confx.WithFlagSet(flagSet), confx.WithEnvPrefix(envPrefix))
+	opts := []confx.Option{
+		confx.WithEnvPrefix(envPrefix),
+	}
+	if flagSet != nil {
+		opts = append(opts, confx.WithFlagSet(flagSet))
+	}
+	return confx.Initialize(def, opts...)
 }

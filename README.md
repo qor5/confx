@@ -1,7 +1,5 @@
 # confx - Configuration Management Library for Go
 
-[中文文档](README_CN.md)
-
 confx is a feature-rich configuration management library for Go that provides a comprehensive solution for handling application configuration. It combines command line arguments, environment variables, configuration files, and default values to help developers efficiently manage application configuration.
 
 ## Features
@@ -53,7 +51,7 @@ package main
 
 import (
     "context"
-    "embed"
+    _ "embed"
     "fmt"
     "log"
     "strings"
@@ -106,8 +104,8 @@ func main() {
         log.Fatalf("Failed to initialize config loader: %v", err)
     }
 
-    // Load configuration (optionally specifying a config file path)
-    config, err := loader(context.Background(), "config.yaml")
+    // Load configuration
+    config, err := loader(context.Background(), "")
     if err != nil {
         log.Fatalf("Failed to load config: %v", err)
     }
@@ -124,15 +122,48 @@ func main() {
 confx automatically generates command line flags for each field in your configuration struct:
 
 ```bash
-./myapp --server-host=127.0.0.1 --server-port=9090 --log-level=debug
+go run *.go -h
+go run *.go --server-host=127.0.0.1 --server-port=9090 --log-level=debug
 ```
+
+You can also specify a configuration file using the custom flag we added:
+
+```bash
+go run *.go --config=production.yaml
+```
+
+Using the `WithFlagSet` option allows you to provide a custom FlagSet, which is particularly useful in the following scenarios:
+
+1. When you need to integrate with an existing command-line argument system
+2. When you want to customize the sorting or grouping of flags
+3. When you need to add additional command-line parameters not related to configuration
+4. When using subcommands in complex applications (such as when used with Cobra)
+
+For example, you can create a custom FlagSet and add extra flags:
+
+```go
+flagSet := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
+flagSet.SortFlags = false
+
+// Add custom flags
+flagSet.StringVar(&configPath, "custom-config-flag", "", "Path to configuration file")
+flagSet.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+
+// Initialize config loader with custom FlagSet
+loader, err := confx.Initialize(defaultConfig, confx.WithFlagSet(flagSet))
+
+// Load configuration
+config, err := loader(context.Background(), configPath)
+```
+
+This allows you to have complete control over how command-line arguments are handled while still leveraging confx's automatic binding functionality.
 
 ### Environment Variables
 
 confx also binds environment variables to configuration fields:
 
 ```bash
-SERVER_HOST=127.0.0.1 SERVER_PORT=9090 LOG_LEVEL=debug ./myapp
+SERVER_HOST=127.0.0.1 SERVER_PORT=9090 LOG_LEVEL=debug go run *.go
 ```
 
 You can customize the environment variable prefix using the `WithEnvPrefix` option:
@@ -144,7 +175,7 @@ loader, err := confx.Initialize(defaultConfig, confx.WithEnvPrefix("APP_"))
 Then use environment variables with the prefix:
 
 ```bash
-APP_SERVER_HOST=127.0.0.1 APP_SERVER_PORT=9090 APP_LOG_LEVEL=debug ./myapp
+APP_SERVER_HOST=127.0.0.1 APP_SERVER_PORT=9090 APP_LOG_LEVEL=debug go run *.go
 ```
 
 ### Configuration Files
