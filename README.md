@@ -1,4 +1,4 @@
-# confx - Powerful Configuration Management Library for Go
+# confx - Configuration Management Library for Go
 
 [中文文档](README_CN.md)
 
