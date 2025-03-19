@@ -23,98 +23,87 @@ go get github.com/qor5/confx
 
 ## Quick Start
 
-### Create a Default Configuration File
-
-First, create a YAML file with your default configuration, named `default-config.yaml`:
-
-```yaml
-# default-config.yaml
-server:
-  host: localhost
-  port: 8080
-  timeout: 30s
-
-database:
-  host: localhost
-  port: 5432
-  username: user
-  password: password
-  database: myapp
-
-logLevel: info
-```
-
 ### Define Configuration Structs
 
 ```go
 package main
 
 import (
-    "context"
-    _ "embed"
-    "fmt"
-    "log"
-    "strings"
-    "time"
+	"context"
+	_ "embed"
+	"fmt"
+	"log"
+	"time"
 
-    "github.com/qor5/confx"
+	"github.com/qor5/confx"
 )
-
-//go:embed default-config.yaml
-var defaultConfigYaml string
 
 // Define configuration structs
 type ServerConfig struct {
-    Host    string `confx:"host" usage:"Server host address" validate:"required"`
-    Port    int    `confx:"port" usage:"Server port" validate:"gte=1,lte=65535"`
-    Timeout time.Duration `confx:"timeout" usage:"Request timeout duration" validate:"gte=0"`
-}
-
-type DatabaseConfig struct {
-    Host     string `confx:"host" usage:"Database host address" validate:"required"`
-    Port     int    `confx:"port" usage:"Database port" validate:"gte=1,lte=65535"`
-    Username string `confx:"username" usage:"Database username"`
-    Password string `confx:"password" usage:"Database password"`
-    Database string `confx:"database" usage:"Database name" validate:"required"`
+	Host    string        `confx:"host" usage:"Server host address" validate:"required"`
+	Port    int           `confx:"port" usage:"Server port" validate:"gte=1,lte=65535"`
+	Timeout time.Duration `confx:"timeout" usage:"Request timeout duration" validate:"gte=0"`
 }
 
 type Config struct {
-    Server   ServerConfig   `confx:"server" validate:"required"`
-    Database DatabaseConfig `confx:"database" validate:"required"`
-    LogLevel string         `confx:"logLevel" usage:"Logging level" validate:"oneof=debug info warn error"`
+	Server   ServerConfig `confx:"server" validate:"required"`
+	LogLevel string       `confx:"logLevel" usage:"Logging level" validate:"oneof=debug info warn error"`
 }
+
+// //go:embed default-config.yaml
+// var defaultConfigYAML string
 
 func main() {
-    // Read default configuration from embedded YAML string
-    // We typically embed default config in the binary for three benefits:
-    // 1. CLI can run independently without external config files
-    // 2. The file can be delivered to users to understand available config options
-    // 3. Users can copy and modify the file, simplifying custom configuration
+	// Define default configuration if user doesn't provide one
+	defaultConfig := Config{
+		Server:   ServerConfig{Host: "localhost", Port: 8080, Timeout: 30 * time.Second},
+		LogLevel: "info",
+	}
 
-    // Note: If your configuration is simple enough, you can directly construct Config object
-    // Example: defaultConfig := Config{Server: ServerConfig{Host: "localhost", Port: 8080}, ...}
-    defaultConfig, err := confx.Read[Config]("yaml", strings.NewReader(defaultConfigYaml))
-    if err != nil {
-        log.Fatalf("Failed to read default config: %v", err)
-    }
+	// NOTE:
+	// We typically embed default config in the binary for three benefits:
+	// 1. CLI can run independently without external config files
+	// 2. The file can be delivered to users to understand available config options
+	// 3. Users can copy and modify the file, simplifying custom configuration
+	//
+	// Example of loading embedded config:
+	// defaultConfig, err := confx.Read[Config]("yaml", strings.NewReader(defaultConfigYAML))
+	// if err != nil {
+	// 	log.Fatalf("Failed to read default config: %v", err)
+	// }
 
-    // Initialize config loader
-    loader, err := confx.Initialize(defaultConfig)
-    if err != nil {
-        log.Fatalf("Failed to initialize config loader: %v", err)
-    }
+	// Initialize config loader
+	loader, err := confx.Initialize(defaultConfig)
+	if err != nil {
+		log.Fatalf("Failed to initialize config loader: %v", err)
+	}
 
-    // Load configuration
-    config, err := loader(context.Background(), "")
-    if err != nil {
-        log.Fatalf("Failed to load config: %v", err)
-    }
+	// Load configuration
+	// The second parameter is the path to the config file, which is optional.
+	// If not provided, it will use the command line argument --config.
+	// If --config is not provided, means no external config file.
+	config, err := loader(context.Background(), "")
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
-    // Use the configuration
-    fmt.Printf("Server config: %s:%d\n", config.Server.Host, config.Server.Port)
-    fmt.Printf("Database config: %s:%d/%s\n", config.Database.Host, config.Database.Port, config.Database.Database)
-    fmt.Printf("Log level: %s\n", config.LogLevel)
+	// Use the configuration
+	fmt.Printf("Server config: %s:%d\n", config.Server.Host, config.Server.Port)
+	fmt.Printf("Log level: %s\n", config.LogLevel)
 }
+```
+
+If you want to read the default configuration from an embedded YAML file, you should create a file like this:
+
+```yaml
+# default-config.yaml
+
+server:
+  host: localhost
+  port: 8080
+  timeout: 30s
+
+logLevel: info
 ```
 
 ### Command Line Flags
@@ -122,15 +111,35 @@ func main() {
 confx automatically generates command line flags for each field in your configuration struct:
 
 ```bash
+# View available flags
 go run *.go -h
+
+# Run with custom configuration via flags
 go run *.go --server-host=127.0.0.1 --server-port=9090 --log-level=debug
 ```
 
-You can also specify a configuration file using the custom flag we added:
+### Environment Variables
+
+confx also binds environment variables to configuration fields:
 
 ```bash
-go run *.go --config=production.yaml
+SERVER_HOST=127.0.0.1 SERVER_PORT=9090 LOG_LEVEL=debug go run *.go
 ```
+
+### Configuration Files
+
+You can also specify a configuration file:
+
+```bash
+# Using the default --config flag
+go run *.go --config=sample.yaml
+```
+
+confx supports loading configuration from various file formats including YAML, JSON, and TOML.
+
+## Features
+
+### Custom Command Line Flags
 
 Using the `WithFlagSet` option allows you to provide a custom FlagSet, which is particularly useful in the following scenarios:
 
@@ -158,13 +167,7 @@ config, err := loader(context.Background(), configPath)
 
 This allows you to have complete control over how command-line arguments are handled while still leveraging confx's automatic binding functionality.
 
-### Environment Variables
-
-confx also binds environment variables to configuration fields:
-
-```bash
-SERVER_HOST=127.0.0.1 SERVER_PORT=9090 LOG_LEVEL=debug go run *.go
-```
+### Custom Environment Variable Prefix
 
 You can customize the environment variable prefix using the `WithEnvPrefix` option:
 
@@ -177,29 +180,6 @@ Then use environment variables with the prefix:
 ```bash
 APP_SERVER_HOST=127.0.0.1 APP_SERVER_PORT=9090 APP_LOG_LEVEL=debug go run *.go
 ```
-
-### Configuration Files
-
-confx supports loading configuration from various file formats:
-
-```yaml
-# config.yaml
-server:
-  host: 127.0.0.1
-  port: 9090
-  timeout: 60s
-
-database:
-  host: db.example.com
-  port: 5432
-  username: admin
-  password: secret
-  database: production
-
-logLevel: debug
-```
-
-## Advanced Features
 
 ### Validation Features
 
@@ -273,7 +253,7 @@ type Config struct {
     InternalState string `confx:"-"`
 
     // Private fields are automatically ignored (no explicit tag needed)
-    internalCache map[string]interface{}
+    internalCache map[string]any
 
     // Even exported fields can be ignored with the "-" tag
     HelperFunction func() `confx:"-"`

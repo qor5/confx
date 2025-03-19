@@ -120,7 +120,7 @@ func parseSlice[T any](parts []string, parseFunc func(string) (T, error)) ([]T, 
 func StringToMapHookFunc(separator string, pairSeparator string) mapstructure.DecodeHookFunc {
 	return func(from reflect.Type, to reflect.Type, data any) (any, error) {
 		if from.Kind() == reflect.String && to.Kind() == reflect.Map {
-			str := strings.Trim(data.(string), "[]")
+			str := strings.Trim(data.(string), "[]{}")
 			if str == "" {
 				return reflect.MakeMap(to).Interface(), nil
 			}
