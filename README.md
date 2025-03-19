@@ -1,6 +1,6 @@
-# confx
+# ConfX
 
-confx is a feature-rich configuration management library for Go that provides a comprehensive solution for handling application configuration. It combines command line arguments, environment variables, configuration files, and default values to help developers efficiently manage application configuration.
+ConfX is a feature-rich configuration management library for Go that provides a comprehensive solution for handling application configuration. It combines command line arguments, environment variables, configuration files, and default values to help developers efficiently manage application configuration.
 
 ## Features
 
@@ -9,7 +9,7 @@ confx is a feature-rich configuration management library for Go that provides a 
 - **Rich Data Types**: Support for basic types, slices, maps, nested structs, and more
 - **Pointer Type Support**: Auto-handles nil pointers to ensure all fields have usable values after configuration loading
 - **Tag-Driven**: Define configuration key names, usage descriptions, and more through struct tags
-- **Complete Validation Support**: Integrates with go-playground/validator, supporting all its validation rules and features
+- **Complete Validation Support**: Integrates with `go-playground/validator`, supporting all its validation rules and features
 - **Enhanced Conditional Validation**: Extends standard validator with enhanced nested struct conditional validation
 - **Struct Embedding**: Flatten nested struct fields using the `squash` tag
 - **Customizable Options**: Flexible options to customize configuration loading behavior
@@ -108,7 +108,7 @@ logLevel: info
 
 ### Command Line Flags
 
-confx automatically generates command line flags for each field in your configuration struct:
+ConfX automatically generates command line flags for each field in your configuration struct:
 
 ```bash
 # View available flags
@@ -120,7 +120,7 @@ go run *.go --server-host=127.0.0.1 --server-port=9090 --log-level=debug
 
 ### Environment Variables
 
-confx also binds environment variables to configuration fields:
+ConfX also binds environment variables to configuration fields:
 
 ```bash
 SERVER_HOST=127.0.0.1 SERVER_PORT=9090 LOG_LEVEL=debug go run *.go
@@ -135,7 +135,7 @@ You can also specify a configuration file:
 go run *.go --config=sample.yaml
 ```
 
-confx supports loading configuration from various file formats including YAML, JSON, and TOML.
+ConfX supports loading configuration from various file formats including YAML, JSON, and TOML.
 
 ## Features
 
@@ -183,11 +183,11 @@ APP_SERVER_HOST=127.0.0.1 APP_SERVER_PORT=9090 APP_LOG_LEVEL=debug go run *.go
 
 ### Validation Features
 
-confx fully integrates go-playground/validator, supporting all its built-in validation rules and features. Additionally, confx provides enhanced functionality.
+ConfX fully integrates `go-playground/validator`, supporting all its built-in validation rules and features. Additionally, ConfX provides enhanced functionality.
 
 #### Standard Validator Features
 
-Here are examples of common validation features provided by go-playground/validator:
+Here are examples of common validation features provided by `go-playground/validator`:
 
 ```go
 type Config struct {
@@ -205,9 +205,9 @@ type Config struct {
 }
 ```
 
-#### confx Enhanced Conditional Validation
+#### ConfX Enhanced Conditional Validation
 
-confx extends the standard validator with the `skip_nested_unless` validation rule for conditionally validating entire nested structures:
+ConfX extends the standard validator with the `skip_nested_unless` validation rule for conditionally validating entire nested structures:
 
 ```go
 type AuthConfig struct {
@@ -262,7 +262,7 @@ type Config struct {
 
 ### Custom Options
 
-confx provides various options to customize configuration loading behavior:
+ConfX provides various options to customize configuration loading behavior:
 
 ```go
 loader, err := confx.Initialize(defaultConfig,
@@ -280,7 +280,7 @@ loader, err := confx.Initialize(defaultConfig,
 
 ### Direct Configuration Loading
 
-In addition to the Initialize method, confx provides simple functions to load configuration directly from files or readers:
+In addition to the Initialize method, ConfX provides simple functions to load configuration directly from files or readers:
 
 ```go
 // Load from config file
@@ -292,10 +292,10 @@ config, err := confx.ReadWithTagName[Config]("custom", "yaml", configFile)
 
 ## Integration with Viper and Cobra
 
-confx seamlessly integrates with the popular Viper and Cobra libraries:
+ConfX seamlessly integrates with the popular Viper and Cobra libraries:
 
-- **Viper**: confx uses Viper as the underlying configuration management engine and allows you to use a custom Viper instance via the `WithViper` option
-- **Cobra**: Check the `examples/cobra` directory to learn how to integrate confx with the Cobra command line framework
+- **Viper**: ConfX uses Viper as the underlying configuration management engine and allows you to use a custom Viper instance via the `WithViper` option
+- **Cobra**: Check the `examples/cobra` directory to learn how to integrate ConfX with the Cobra command line framework
 
 ## Examples
 
