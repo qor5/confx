@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-type Loader[T any] func(ctx context.Context, path string) (T, error)
+type Loader[T any] func(ctx context.Context, confPath string) (T, error)
 
 // Initialize sets up configuration binding by automatically registering command-line flags,
 // binding environment variables, loading configuration files, and validating the final configuration.
