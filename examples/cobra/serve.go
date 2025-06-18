@@ -8,35 +8,36 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var serveConfLoader confx.Loader[*config.Config]
+var serveCmd = func() *cobra.Command {
+	var confPath string
+	var confLoader confx.Loader[*config.Config]
 
-var serveCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "Start the server",
-	Run: func(cmd *cobra.Command, args []string) {
-		confPath, err := cmd.Flags().GetString(flagConfig)
-		if err != nil {
-			log.Fatalf("Failed to get config path: %v", err)
-		}
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conf, err := confLoader(cmd.Context(), confPath)
+			if err != nil {
+				return err
+			}
+			conf.Print()
+			return nil
+		},
+	}
 
-		conf, err := serveConfLoader(cmd.Context(), confPath)
-		if err != nil {
-			log.Fatalf("Failed to load config: %+v", err)
-		}
+	flagSet := cmd.Flags()
+	flagSet.SortFlags = false
+	flagSet.StringVar(&confPath, flagConfig, "", "Path to the configuration yaml file")
 
-		conf.Print()
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(serveCmd)
-
-	serveCmd.Flags().SortFlags = false
-	serveCmd.Flags().String(flagConfig, "", "Path to the configuration yaml file")
-
-	loader, err := config.Initialize(serveCmd.Flags(), envPrefix)
+	var err error
+	confLoader, err = config.Initialize(flagSet, envPrefix)
 	if err != nil {
 		log.Fatalf("Failed to initialize config: %+v", err)
 	}
-	serveConfLoader = loader
+
+	return cmd
+}()
+
+func init() {
+	rootCmd.AddCommand(serveCmd)
 }
