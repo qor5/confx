@@ -13,11 +13,11 @@ const (
 
 var rootCmd = &cobra.Command{
 	Use:   "server",
-	Short: "a server command",
+	Short: "server command",
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Command failed: %v", err)
+		log.Fatalf("Failed to execute command: %v", err)
 	}
 }

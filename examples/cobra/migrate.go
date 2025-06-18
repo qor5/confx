@@ -4,26 +4,32 @@ import (
 	"log"
 	"os"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-var migrateCmd = &cobra.Command{
-	Use:   "migrate",
-	Short: "Migrate the database",
-	Run: func(cmd *cobra.Command, args []string) {
-		dsn, err := cmd.Flags().GetString("database-dsn")
-		if err != nil {
-			log.Fatalf("Failed to get database dsn: %v", err)
-		}
-		if dsn == "" {
-			dsn = os.Getenv(envPrefix + "DATABASE_DSN")
-		}
-		log.Printf("should migrate database with dsn: %s", dsn)
-	},
-}
+var migrateCmd = func() *cobra.Command {
+	var dsn string
+	cmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Migrate the database",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if dsn == "" {
+				dsn = os.Getenv(envPrefix + "DATABASE_DSN")
+			}
+			if dsn == "" {
+				return errors.New("database dsn is required")
+			}
+			log.Printf("should migrate database with dsn: %s", dsn)
+			return nil
+		},
+	}
+	flagSet := cmd.Flags()
+	flagSet.SortFlags = false
+	flagSet.StringVar(&dsn, "database-dsn", "", "database dsn")
+	return cmd
+}()
 
 func init() {
 	rootCmd.AddCommand(migrateCmd)
-
-	migrateCmd.Flags().String("database-dsn", "", "database dsn")
 }
