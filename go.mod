@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/go-playground/validator/v10 v10.26.0
-	github.com/go-viper/mapstructure/v2 v2.3.0
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/huandu/go-clone v1.7.3
 	github.com/pkg/errors v0.9.1
 	github.com/samber/lo v1.51.0
