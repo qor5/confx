@@ -4,11 +4,12 @@ import (
 	"context"
 	"log"
 
+	"github.com/qor5/confx"
 	"github.com/qor5/confx/examples/config"
 )
 
 func main() {
-	loader, err := config.Initialize(nil, "APP_")
+	loader, err := config.Initialize(confx.WithEnvPrefix("APP_"))
 	if err != nil {
 		log.Fatalf("Failed to initialize config loader: %v", err)
 	}

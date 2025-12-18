@@ -8,7 +8,6 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/qor5/confx"
-	"github.com/spf13/pflag"
 )
 
 // ServerConfig defines server-related configuration.
@@ -105,9 +104,10 @@ func (c *Config) Print() {
 
 	fmt.Println("\n=== Authentication Configuration ===")
 	fmt.Printf("Provider: %s\n", c.Auth.Provider)
-	if c.Auth.Provider == "jwt" {
+	switch c.Auth.Provider {
+	case "jwt":
 		fmt.Printf("JWT Secret: %s\n", maskSecret(c.Auth.JWT.Secret))
-	} else if c.Auth.Provider == "oauth" {
+	case "oauth":
 		fmt.Printf("OAuth Client ID: %s\n", c.Auth.OAuth.ClientID)
 		fmt.Printf("OAuth Client Secret: %s\n", maskSecret(c.Auth.OAuth.ClientSecret))
 	}
@@ -120,19 +120,13 @@ func (c *Config) Print() {
 	}
 }
 
-//go:embed embed/default.yaml
+//go:embed embed/default-config.yaml
 var defaultConfigYAML string
 
-func Initialize(flagSet *pflag.FlagSet, envPrefix string) (confx.Loader[*Config], error) {
+func Initialize(opts ...confx.Option) (confx.Loader[*Config], error) {
 	def, err := confx.Read[*Config]("yaml", strings.NewReader(defaultConfigYAML))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to load default config from embedded YAML")
-	}
-	opts := []confx.Option{
-		confx.WithEnvPrefix(envPrefix),
-	}
-	if flagSet != nil {
-		opts = append(opts, confx.WithFlagSet(flagSet))
 	}
 	return confx.Initialize(def, opts...)
 }

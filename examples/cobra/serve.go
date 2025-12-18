@@ -30,7 +30,7 @@ var serveCmd = func() *cobra.Command {
 	flagSet.StringVar(&confPath, flagConfig, "", "Path to the configuration yaml file")
 
 	var err error
-	confLoader, err = config.Initialize(flagSet, envPrefix)
+	confLoader, err = config.Initialize(confx.WithFlagSet(flagSet), confx.WithEnvPrefix(envPrefix))
 	if err != nil {
 		log.Fatalf("Failed to initialize config: %+v", err)
 	}
