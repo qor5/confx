@@ -156,16 +156,24 @@ flagSet.SortFlags = false
 
 // Add custom flags
 flagSet.StringVar(&configPath, "custom-config-flag", "", "Path to configuration file")
-flagSet.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 
 // Initialize config loader with custom FlagSet
 loader, err := confx.Initialize(defaultConfig, confx.WithFlagSet(flagSet))
+
+// IMPORTANT: When using custom flagSet with user-defined flags (like --config),
+// you must parse flags before calling the loader to populate those variables.
+// This is NOT needed when using Cobra, as Cobra manages flag parsing itself.
+if err := flagSet.Parse(os.Args[1:]); err != nil {
+    log.Fatalf("Failed to parse flags: %v", err)
+}
 
 // Load configuration
 config, err := loader(context.Background(), configPath)
 ```
 
 This allows you to have complete control over how command-line arguments are handled while still leveraging confx's automatic binding functionality.
+
+> **Note**: When integrating with Cobra, you don't need to manually call `Parse()` because Cobra handles flag parsing automatically. See `examples/cobra` for details.
 
 ### Custom Environment Variable Prefix
 
