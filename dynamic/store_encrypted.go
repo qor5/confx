@@ -161,6 +161,29 @@ func (s *EncryptedConfigStore[T]) Save(ctx context.Context, config T) error {
 	return nil
 }
 
+// WithTx returns a new EncryptedConfigStore that uses the given transaction.
+// This allows the store to participate in an external transaction.
+// Returns ConfigStore[T] to satisfy the TxUpdater interface.
+//
+// Example:
+//
+//	err := db.Transaction(func(tx *gorm.DB) error {
+//	    txStore := store.WithTx(tx)
+//	    if err := txStore.Update(ctx, updateFunc); err != nil {
+//	        return err
+//	    }
+//	    // Other operations in the same transaction...
+//	    return nil
+//	})
+func (s *EncryptedConfigStore[T]) WithTx(tx *gorm.DB) ConfigStore[T] {
+	return &EncryptedConfigStore[T]{
+		db:                tx,
+		kxManager:         s.kxManager,
+		configKey:         s.configKey,
+		encryptionContext: s.encryptionContext,
+	}
+}
+
 // Update applies a partial update to the config.
 // The update function receives the current config and returns the updated config.
 // This is useful for updating only specific fields without replacing the entire config.

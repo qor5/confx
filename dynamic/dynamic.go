@@ -144,12 +144,49 @@ func (c *ConfigProvider[T]) Update(ctx context.Context, updateFunc func(T) T) er
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.store.Update(ctx, updateFunc); err != nil {
+	return c.updateWithStore(ctx, c.store, updateFunc)
+}
+
+// TxUpdater is an interface for stores that support transactions.
+type TxUpdater[T any] interface {
+	WithTx(tx *gorm.DB) ConfigStore[T]
+}
+
+// UpdateWithTx applies a partial update to the config using the given transaction.
+// The underlying store must implement TxUpdater interface (e.g., EncryptedConfigStore).
+// This allows the config update to participate in an external transaction.
+//
+// Example:
+//
+//	err := db.Transaction(func(tx *gorm.DB) error {
+//	    if err := provider.UpdateWithTx(ctx, tx, updateFunc); err != nil {
+//	        return err
+//	    }
+//	    // Other operations in the same transaction...
+//	    return nil
+//	})
+func (c *ConfigProvider[T]) UpdateWithTx(ctx context.Context, tx *gorm.DB, updateFunc func(T) T) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if store supports transactions
+	txStore, ok := c.store.(TxUpdater[T])
+	if !ok {
+		return errors.New("underlying store does not support transactions")
+	}
+
+	return c.updateWithStore(ctx, txStore.WithTx(tx), updateFunc)
+}
+
+// updateWithStore is the common implementation for Update and UpdateWithTx.
+// Caller must hold c.mu lock.
+func (c *ConfigProvider[T]) updateWithStore(ctx context.Context, store ConfigStore[T], updateFunc func(T) T) error {
+	if err := store.Update(ctx, updateFunc); err != nil {
 		return err
 	}
 
 	// Reload from store to get the updated config
-	config, err := c.store.Load(ctx)
+	config, err := store.Load(ctx)
 	if err != nil {
 		// Invalidate cache on error so next Get will reload
 		c.cacheSet = false
