@@ -375,6 +375,12 @@ func flagSetMap(flagSet *pflag.FlagSet, fieldValue reflect.Value, flagKey, usage
 		flagSet.StringToString(flagKey, convertMap(fieldValue, func(v reflect.Value) string {
 			return v.String()
 		}), usage)
+	case reflect.Struct:
+		bs, err := json.Marshal(fieldValue.Interface())
+		if err != nil {
+			return errors.Wrapf(err, "failed to marshal json, key %q", flagKey)
+		}
+		flagSet.String(flagKey, string(bs), usage)
 	default:
 		return errors.Errorf("flag key %q: unsupported map value type %q", flagKey, elemType)
 	}
