@@ -120,6 +120,16 @@ func parseSlice[T any](parts []string, parseFunc func(string) (T, error)) ([]T, 
 func StringToMapHookFunc(separator string, pairSeparator string) mapstructure.DecodeHookFunc {
 	return func(from reflect.Type, to reflect.Type, data any) (any, error) {
 		if from.Kind() == reflect.String && to.Kind() == reflect.Map {
+			elemType := to.Elem()
+			if unwrapType(elemType).Kind() == reflect.Struct {
+				mapValue := reflect.New(to).Elem()
+				err := json.Unmarshal([]byte(data.(string)), mapValue.Addr().Interface())
+				if err != nil {
+					return nil, errors.Wrapf(err, "failed to unmarshal json, data: %s", data)
+				}
+				return mapValue.Interface(), nil
+			}
+
 			str := strings.Trim(data.(string), "[]{}")
 			if str == "" {
 				return reflect.MakeMap(to).Interface(), nil
@@ -128,7 +138,6 @@ func StringToMapHookFunc(separator string, pairSeparator string) mapstructure.De
 			pairs := strings.Split(str, separator)
 
 			keyType := to.Key()
-			elemType := to.Elem()
 			if keyType.Kind() != reflect.String {
 				return nil, errors.Errorf("only string keys are supported for map type, got %q", keyType)
 			}
