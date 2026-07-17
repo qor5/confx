@@ -93,7 +93,27 @@ func main() {
 }
 ```
 
-If you want to read the default configuration from an embedded YAML file, you should create a file like this:
+### Recommended: Embed a Default Config File
+
+Rather than hand-writing the default struct literal, the recommended approach is to keep your defaults in a YAML file, embed it into the binary, and load it with `confx.Read`. A committed default config file then doubles as **living documentation** of your command's configuration:
+
+- It lists every configuration option the command supports.
+- It shows the default value of each option.
+- Comments in the file describe what each option does.
+- Users can copy it verbatim, then trim or override only what they need.
+
+```go
+//go:embed default-config.yaml
+var defaultConfigYAML string
+
+def, err := confx.Read[*Config]("yaml", strings.NewReader(defaultConfigYAML))
+if err != nil {
+    log.Fatalf("Failed to read default config: %v", err)
+}
+loader, err := confx.Initialize(def)
+```
+
+Create the embedded file like this (see `examples/config` for a complete, working example):
 
 ```yaml
 # default-config.yaml
@@ -156,16 +176,24 @@ flagSet.SortFlags = false
 
 // Add custom flags
 flagSet.StringVar(&configPath, "custom-config-flag", "", "Path to configuration file")
-flagSet.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 
 // Initialize config loader with custom FlagSet
 loader, err := confx.Initialize(defaultConfig, confx.WithFlagSet(flagSet))
+
+// IMPORTANT: When using custom flagSet with user-defined flags (like --config),
+// you must parse flags before calling the loader to populate those variables.
+// This is NOT needed when using Cobra, as Cobra manages flag parsing itself.
+if err := flagSet.Parse(os.Args[1:]); err != nil {
+    log.Fatalf("Failed to parse flags: %v", err)
+}
 
 // Load configuration
 config, err := loader(context.Background(), configPath)
 ```
 
 This allows you to have complete control over how command-line arguments are handled while still leveraging confx's automatic binding functionality.
+
+> **Note**: When integrating with Cobra, you don't need to manually call `Parse()` because Cobra handles flag parsing automatically. See `examples/cobra` for details.
 
 ### Custom Environment Variable Prefix
 
