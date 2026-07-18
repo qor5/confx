@@ -95,6 +95,11 @@ func (c *ConfigProvider[T]) Get(ctx context.Context) (T, error) {
 func (c *ConfigProvider[T]) Reload(ctx context.Context) (T, error) {
 	var zero T
 
+	// Capture the current cached value before invalidating, so a failed
+	// reload can still fall back to it. getStaleCache gates on cacheSet,
+	// which Invalidate clears, so the stale value must be read first.
+	staleVal, hasStale := c.getStaleCache()
+
 	// Invalidate cache first
 	c.Invalidate()
 
@@ -106,8 +111,8 @@ func (c *ConfigProvider[T]) Reload(ctx context.Context) (T, error) {
 			return *c.defaultValue, nil
 		}
 		// On error, return stale cache if available
-		if val, ok := c.getStaleCache(); ok {
-			return val, nil
+		if hasStale {
+			return staleVal, nil
 		}
 		return zero, err
 	}

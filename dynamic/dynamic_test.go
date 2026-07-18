@@ -200,6 +200,70 @@ func TestConfigProvider_Reload(t *testing.T) {
 	assert.Equal(t, 2, store.loadCount)
 }
 
+func TestConfigProvider_Reload_ErrorFallsBackToStaleCache(t *testing.T) {
+	type Config struct {
+		Port int
+	}
+
+	loadErr := errors.New("db unavailable")
+	failing := false
+	store := &mockStore[Config]{
+		loadFunc: func(ctx context.Context) (Config, error) {
+			if failing {
+				var zero Config
+				return zero, loadErr
+			}
+			return Config{Port: 8080}, nil
+		},
+	}
+
+	dc := NewConfigProvider[Config](
+		store,
+		WithTTL[Config](5*time.Minute),
+	)
+
+	ctx := context.Background()
+
+	// Prime the cache with a successful load.
+	config, err := dc.Get(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 8080, config.Port)
+
+	// Store now fails: Reload should return the previously cached value
+	// instead of surfacing the error.
+	failing = true
+	config, err = dc.Reload(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 8080, config.Port)
+}
+
+func TestConfigProvider_Reload_ErrorWithoutCacheReturnsError(t *testing.T) {
+	type Config struct {
+		Port int
+	}
+
+	loadErr := errors.New("db unavailable")
+	store := &mockStore[Config]{
+		loadFunc: func(ctx context.Context) (Config, error) {
+			var zero Config
+			return zero, loadErr
+		},
+	}
+
+	dc := NewConfigProvider[Config](
+		store,
+		WithTTL[Config](5*time.Minute),
+	)
+
+	ctx := context.Background()
+
+	// No prior successful load means no stale cache to fall back to,
+	// so the load error propagates to the caller.
+	_, err := dc.Reload(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, loadErr)
+}
+
 func TestConfigProvider_Invalidate(t *testing.T) {
 	type Config struct {
 		Port int
