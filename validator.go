@@ -188,7 +188,10 @@ func stopIfImpl(_ context.Context, fl validator.FieldLevel) bool {
 	return true
 }
 
-func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
+// stopTagsWrapper strips the errors produced by the stop tags. They fail on
+// purpose — that is how validation is halted — so their errors are an
+// implementation detail and must never reach the caller.
+func stopTagsWrapper(next ValidatorFunc) ValidatorFunc {
 	return func(ctx context.Context, v any) error {
 		err := next(ctx, v)
 		if err == nil {
@@ -236,6 +239,6 @@ func ValidatorWithSkipNestedUnless(validator Validator) Validator {
 	}
 	return &wrappedValidator{
 		Validator:     validator,
-		structCtxFunc: skipNestedUnlessWrapper(validator.StructCtx),
+		structCtxFunc: stopTagsWrapper(validator.StructCtx),
 	}
 }

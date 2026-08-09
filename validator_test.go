@@ -362,3 +362,43 @@ func TestBuiltinSkipUnlessDoesNotActuallySkip(t *testing.T) {
 	assert.ErrorAs(t, err, &verr)
 	assert.Equal(t, "gte", verr[0].Tag(), "built-in skip_unless is documented as a presence check, not a skip")
 }
+
+// An odd parameter count is a struct-tag typo, and it panics. The message has
+// to name the tag AND the field, otherwise there is nothing to grep for: both
+// stop tags share one message, and a struct may carry several of them.
+func TestStopTagsPanicMessageNamesTagAndField(t *testing.T) {
+	v := newStopValidator()
+
+	t.Run("stop_if", func(t *testing.T) {
+		type S struct {
+			Amount int `validate:"stop_if=Other"` // missing the value half
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for stop_if Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+
+	t.Run("stop_unless", func(t *testing.T) {
+		type S struct {
+			Amount int `validate:"stop_unless=Other"`
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for stop_unless Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+
+	t.Run("the deprecated alias reports its own tag name, not stop_unless", func(t *testing.T) {
+		// fl.GetTag() is what makes this work: the alias shares stop_unless's
+		// implementation, so a hardcoded name would send the reader looking for
+		// a tag that is not in their struct.
+		type S struct {
+			Amount int `validate:"skip_nested_unless=Other"`
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for skip_nested_unless Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+}
