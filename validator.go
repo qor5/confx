@@ -87,7 +87,20 @@ func (w *wrappedValidator) StructCtx(ctx context.Context, v any) error {
 	return w.structCtxFunc(ctx, v)
 }
 
-const skipNestedUnlessTag = "skip_nested_unless"
+const (
+	skipNestedUnlessTag = "skip_nested_unless"
+	skipIfTag           = "skip_if"
+)
+
+// skipTagImpls are registered together by ValidatorWithSkipNestedUnless.
+var skipTagImpls = map[string]validator.FuncCtx{
+	skipNestedUnlessTag: skipNestedUnlessImpl,
+	skipIfTag:           skipIfImpl,
+}
+
+// skippedTags are the tags whose "failures" mean "stop validating this field",
+// not "this field is invalid". Their errors are filtered out after StructCtx.
+var skippedTags = []string{skipNestedUnlessTag, skipIfTag}
 
 // skipNestedUnless is a validation function that conditionally skips nested struct validation
 // based on field values in the parent struct. It is used with the "skip_nested_unless" tag.
@@ -135,6 +148,41 @@ func skipNestedUnlessImpl(_ context.Context, fl validator.FieldLevel) bool {
 	return true
 }
 
+// skipIfImpl skips the REMAINING validations on a field when another field
+// holds a given value. It is used with the "skip_if" tag.
+//
+// Tags on a field are evaluated left to right and stop at the first failure, so
+// returning false here prevents everything after it from running; the resulting
+// error is then filtered out (see skippedTags). Put "skip_if" first.
+//
+// The motivating case is a cross-field comparison whose right-hand side has a
+// sentinel value. `ltefield=MaxOpenConns` reads as "at most MaxOpenConns", but
+// when MaxOpenConns is 0 meaning UNLIMITED it is not an upper bound at all, and
+// the tag rejects a perfectly good config:
+//
+//	MaxIdleConns int `validate:"skip_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+//	MaxOpenConns int // 0 = unlimited
+//
+// Parameters are pairs of (field name, value), same shape as skip_nested_unless.
+// Validation is skipped when ANY pair matches — "skip if this OR that".
+//
+// Panics if the number of parameters is not even.
+func skipIfImpl(_ context.Context, fl validator.FieldLevel) bool {
+	params := parseOneOfParam2(fl.Param())
+	if len(params)%2 != 0 {
+		panic(fmt.Sprintf("Bad param number for skip_if %s", fl.FieldName()))
+	}
+	for i := 0; i < len(params); i += 2 {
+		// Return false to stop the remaining tags on this field; the error is
+		// filtered out afterwards. A missing field is not a match, so an
+		// unknown name never silently disables a rule.
+		if requireCheckFieldValue(fl, params[i], params[i+1], false) {
+			return false
+		}
+	}
+	return true
+}
+
 func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 	return func(ctx context.Context, v any) error {
 		err := next(ctx, v)
@@ -144,7 +192,7 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 		var verr validator.ValidationErrors
 		if errors.As(err, &verr) {
 			filtered := lo.Filter(verr, func(e validator.FieldError, _ int) bool {
-				return e.Tag() != skipNestedUnlessTag
+				return !lo.Contains(skippedTags, e.Tag())
 			})
 			if len(filtered) == 0 {
 				return nil
@@ -160,8 +208,8 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 // the values of other fields in the parent struct.
 //
 // The wrapper performs two main functions:
-//  1. Registers the "skip_nested_unless" validation tag
-//  2. Filters out validation errors from skipped nested structs
+//  1. Registers the "skip_nested_unless" and "skip_if" validation tags
+//  2. Filters out their errors, which mean "stop validating here", not "invalid"
 //
 // Parameters:
 //   - validator: The base validator to wrap with skip_nested_unless support
@@ -171,9 +219,10 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 //
 // Panics if registration of the skip_nested_unless validation fails
 func ValidatorWithSkipNestedUnless(validator Validator) Validator {
-	err := validator.RegisterValidationCtx(skipNestedUnlessTag, skipNestedUnlessImpl)
-	if err != nil {
-		panic(fmt.Sprintf("failed to register validation: %v", err))
+	for tag, impl := range skipTagImpls {
+		if err := validator.RegisterValidationCtx(tag, impl); err != nil {
+			panic(fmt.Sprintf("failed to register validation %q: %v", tag, err))
+		}
 	}
 	return &wrappedValidator{
 		Validator:     validator,

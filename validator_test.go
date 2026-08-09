@@ -264,3 +264,82 @@ func TestParseOneOfParam2(t *testing.T) {
 		})
 	}
 }
+
+func TestSkipIf(t *testing.T) {
+	// The motivating shape: MaxOpenConns == 0 means UNLIMITED, so it is not an
+	// upper bound and `ltefield` must not run against it.
+	type Pool struct {
+		MaxIdleConns int `validate:"skip_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+		MaxOpenConns int
+	}
+
+	v := ValidatorWithSkipNestedUnless(
+		validator.New(validator.WithRequiredStructEnabled()),
+	)
+
+	for _, c := range []struct {
+		name       string
+		idle, open int
+		wantTag    string // "" = no error
+	}{
+		{"cap set, idle within it", 20, 200, ""},
+		{"cap set, idle equals it", 10, 10, ""},
+		{"cap set, idle above it", 11, 10, "ltefield"},
+		{"unlimited, idle is not compared", 20, 0, ""},
+		{"unlimited, both zero", 0, 0, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			err := v.StructCtx(context.Background(), Pool{c.idle, c.open})
+			if c.wantTag == "" {
+				assert.NoError(t, err)
+				return
+			}
+			var verr validator.ValidationErrors
+			assert.ErrorAs(t, err, &verr)
+			assert.Len(t, verr, 1)
+			assert.Equal(t, c.wantTag, verr[0].Tag())
+		})
+	}
+}
+
+func TestSkipIfDoesNotLeakItsOwnError(t *testing.T) {
+	// skip_if works by failing, which stops the tags after it. That failure is
+	// an implementation detail and must never reach the caller.
+	type S struct {
+		A int `validate:"skip_if=B 0,gte=100"`
+		B int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+
+	// B == 0 → skipped, so A = 1 does not have to be >= 100.
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
+
+	// B != 0 → not skipped, so gte=100 applies and reports itself, not skip_if.
+	err := v.StructCtx(context.Background(), S{A: 1, B: 7})
+	var verr validator.ValidationErrors
+	assert.ErrorAs(t, err, &verr)
+	assert.Len(t, verr, 1)
+	assert.Equal(t, "gte", verr[0].Tag())
+}
+
+func TestSkipIfMatchesAnyPair(t *testing.T) {
+	type S struct {
+		A    int `validate:"skip_if=B 0 C 0,gte=100"`
+		B, C int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 0, C: 9}), "B matches")
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 9, C: 0}), "C matches")
+	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 9, C: 9}), "neither matches")
+}
+
+func TestSkipIfUnknownFieldDoesNotDisableTheRule(t *testing.T) {
+	// A typo in the field name must not silently switch validation off.
+	type S struct {
+		A int `validate:"skip_if=Nope 0,gte=100"`
+		B int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
+}
