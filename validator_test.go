@@ -265,11 +265,11 @@ func TestParseOneOfParam2(t *testing.T) {
 	}
 }
 
-func TestSkipRestIf(t *testing.T) {
+func TestStopIf(t *testing.T) {
 	// The motivating shape: MaxOpenConns == 0 means UNLIMITED, so it is not an
 	// upper bound and `ltefield` must not run against it.
 	type Pool struct {
-		MaxIdleConns int `validate:"skip_rest_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+		MaxIdleConns int `validate:"stop_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
 		MaxOpenConns int
 	}
 
@@ -302,11 +302,11 @@ func TestSkipRestIf(t *testing.T) {
 	}
 }
 
-func TestSkipRestIfDoesNotLeakItsOwnError(t *testing.T) {
-	// skip_rest_if works by failing, which stops the tags after it. That failure is
+func TestStopIfDoesNotLeakItsOwnError(t *testing.T) {
+	// stop_if works by failing, which stops the tags after it. That failure is
 	// an implementation detail and must never reach the caller.
 	type S struct {
-		A int `validate:"skip_rest_if=B 0,gte=100"`
+		A int `validate:"stop_if=B 0,gte=100"`
 		B int
 	}
 	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
@@ -314,7 +314,7 @@ func TestSkipRestIfDoesNotLeakItsOwnError(t *testing.T) {
 	// B == 0 → skipped, so A = 1 does not have to be >= 100.
 	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
 
-	// B != 0 → not skipped, so gte=100 applies and reports itself, not skip_rest_if.
+	// B != 0 → not skipped, so gte=100 applies and reports itself, not stop_if.
 	err := v.StructCtx(context.Background(), S{A: 1, B: 7})
 	var verr validator.ValidationErrors
 	assert.ErrorAs(t, err, &verr)
@@ -322,9 +322,9 @@ func TestSkipRestIfDoesNotLeakItsOwnError(t *testing.T) {
 	assert.Equal(t, "gte", verr[0].Tag())
 }
 
-func TestSkipRestIfMatchesAnyPair(t *testing.T) {
+func TestStopIfMatchesAnyPair(t *testing.T) {
 	type S struct {
-		A    int `validate:"skip_rest_if=B 0 C 0,gte=100"`
+		A    int `validate:"stop_if=B 0 C 0,gte=100"`
 		B, C int
 	}
 	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
@@ -334,21 +334,21 @@ func TestSkipRestIfMatchesAnyPair(t *testing.T) {
 	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 9, C: 9}), "neither matches")
 }
 
-func TestSkipRestIfUnknownFieldDoesNotDisableTheRule(t *testing.T) {
+func TestStopIfUnknownFieldDoesNotDisableTheRule(t *testing.T) {
 	// A typo in the field name must not silently switch validation off.
 	type S struct {
-		A int `validate:"skip_rest_if=Nope 0,gte=100"`
+		A int `validate:"stop_if=Nope 0,gte=100"`
 		B int
 	}
 	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
 	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
 }
 
-// Guards the reason skip_rest_if exists at all: validator's built-in
+// Guards the reason stop_if / stop_unless exist at all: validator's built-in
 // "skip_unless" does not skip anything despite its name. It returns
 // hasValue(fl) — a presence check in the required_* family — so the tags after
 // it still run. If upstream ever changes that, this test fails and we can
-// reconsider whether skip_rest_if is still needed.
+// reconsider whether stop_if is still needed.
 func TestBuiltinSkipUnlessDoesNotActuallySkip(t *testing.T) {
 	type S struct {
 		A int `validate:"skip_unless=B 0,gte=100"`
