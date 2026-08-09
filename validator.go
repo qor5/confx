@@ -89,18 +89,18 @@ func (w *wrappedValidator) StructCtx(ctx context.Context, v any) error {
 
 const (
 	skipNestedUnlessTag = "skip_nested_unless"
-	skipIfTag           = "skip_if"
+	skipRestIfTag       = "skip_rest_if"
 )
 
 // skipTagImpls are registered together by ValidatorWithSkipNestedUnless.
 var skipTagImpls = map[string]validator.FuncCtx{
 	skipNestedUnlessTag: skipNestedUnlessImpl,
-	skipIfTag:           skipIfImpl,
+	skipRestIfTag:       skipRestIfImpl,
 }
 
 // skippedTags are the tags whose "failures" mean "stop validating this field",
 // not "this field is invalid". Their errors are filtered out after StructCtx.
-var skippedTags = []string{skipNestedUnlessTag, skipIfTag}
+var skippedTags = []string{skipNestedUnlessTag, skipRestIfTag}
 
 // skipNestedUnless is a validation function that conditionally skips nested struct validation
 // based on field values in the parent struct. It is used with the "skip_nested_unless" tag.
@@ -148,29 +148,40 @@ func skipNestedUnlessImpl(_ context.Context, fl validator.FieldLevel) bool {
 	return true
 }
 
-// skipIfImpl skips the REMAINING validations on a field when another field
-// holds a given value. It is used with the "skip_if" tag.
+// skipRestIfImpl skips the REMAINING validations on a field when another field
+// holds a given value. It is used with the "skip_rest_if" tag.
+//
+// Not to be confused with validator's built-in "skip_unless", which despite the
+// name never skips anything: it returns hasValue(fl), i.e. it is a presence
+// check in the required_* family. There is no built-in that stops the tags
+// after it, which is why this exists.
+//
+// The name deliberately stays out of the upstream "skip_*" namespace.
+// RegisterValidationCtx silently REPLACES a built-in of the same name and
+// returns nil, so a collision would change behaviour for every consumer with
+// nothing to announce it — the same reason the tag above is called
+// "skip_nested_unless" rather than "skip_unless".
 //
 // Tags on a field are evaluated left to right and stop at the first failure, so
 // returning false here prevents everything after it from running; the resulting
-// error is then filtered out (see skippedTags). Put "skip_if" first.
+// error is then filtered out (see skippedTags). Put "skip_rest_if" first.
 //
 // The motivating case is a cross-field comparison whose right-hand side has a
 // sentinel value. `ltefield=MaxOpenConns` reads as "at most MaxOpenConns", but
 // when MaxOpenConns is 0 meaning UNLIMITED it is not an upper bound at all, and
 // the tag rejects a perfectly good config:
 //
-//	MaxIdleConns int `validate:"skip_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+//	MaxIdleConns int `validate:"skip_rest_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
 //	MaxOpenConns int // 0 = unlimited
 //
 // Parameters are pairs of (field name, value), same shape as skip_nested_unless.
 // Validation is skipped when ANY pair matches — "skip if this OR that".
 //
 // Panics if the number of parameters is not even.
-func skipIfImpl(_ context.Context, fl validator.FieldLevel) bool {
+func skipRestIfImpl(_ context.Context, fl validator.FieldLevel) bool {
 	params := parseOneOfParam2(fl.Param())
 	if len(params)%2 != 0 {
-		panic(fmt.Sprintf("Bad param number for skip_if %s", fl.FieldName()))
+		panic(fmt.Sprintf("Bad param number for skip_rest_if %s", fl.FieldName()))
 	}
 	for i := 0; i < len(params); i += 2 {
 		// Return false to stop the remaining tags on this field; the error is
@@ -208,7 +219,7 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 // the values of other fields in the parent struct.
 //
 // The wrapper performs two main functions:
-//  1. Registers the "skip_nested_unless" and "skip_if" validation tags
+//  1. Registers the "skip_nested_unless" and "skip_rest_if" validation tags
 //  2. Filters out their errors, which mean "stop validating here", not "invalid"
 //
 // Parameters:
