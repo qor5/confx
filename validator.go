@@ -87,47 +87,54 @@ func (w *wrappedValidator) StructCtx(ctx context.Context, v any) error {
 	return w.structCtxFunc(ctx, v)
 }
 
-const skipNestedUnlessTag = "skip_nested_unless"
+const (
+	// stopIfTag / stopUnlessTag stop validation of a field at that point.
+	stopIfTag     = "stop_if"
+	stopUnlessTag = "stop_unless"
 
-// skipNestedUnless is a validation function that conditionally skips nested struct validation
-// based on field values in the parent struct. It is used with the "skip_nested_unless" tag.
+	// skipNestedUnlessTag is the original name of stop_unless, kept as an alias
+	// so existing struct tags keep working.
+	//
+	// Deprecated: use stop_unless. The "nested" is misleading — the tag is not
+	// specific to nested structs (see the note on stopUnlessImpl).
+	skipNestedUnlessTag = "skip_nested_unless"
+)
+
+// stopTagImpls are registered together by ValidatorWithSkipNestedUnless.
+var stopTagImpls = map[string]validator.FuncCtx{
+	stopIfTag:           stopIfImpl,
+	stopUnlessTag:       stopUnlessImpl,
+	skipNestedUnlessTag: stopUnlessImpl,
+}
+
+// stopTags are the tags whose "failure" means "stop validating here", not
+// "this field is invalid". Their errors are filtered out after StructCtx.
+var stopTags = []string{stopIfTag, stopUnlessTag, skipNestedUnlessTag}
+
+// stopUnlessImpl stops validating a field unless every (field, value) pair
+// matches. It backs the "stop_unless" tag and its "skip_nested_unless" alias.
 //
-// The function takes pairs of parameters where each pair consists of:
-//  1. A field name to check
-//  2. The expected value for that field
-//
-// If any of the specified field values don't match their expected values, the nested validation
-// is skipped by returning false. All pairs must match for validation to proceed.
-//
-// Example usage in struct tags:
+// stopIfImpl is the same thing with the opposite polarity. Polarity is the ONLY
+// difference between the two; see the note there for what "stop" covers.
 //
 //	type Config struct {
-//	  Type    string     `validate:"oneof=local remote"`
-//	  Local   LocalConf  `validate:"skip_nested_unless=Type local"`
-//	  Remote  RemoteConf `validate:"skip_nested_unless=Type remote"`
+//	  Type   string    `validate:"oneof=local remote"`
+//	  Local  LocalConf `validate:"stop_unless=Type local"`
+//	  Remote RemoteConf `validate:"stop_unless=Type remote"`
 //	}
 //
-// In this example:
-// - Local config is only validated when Type="local"
-// - Remote config is only validated when Type="remote"
+// Local is validated only when Type == "local", Remote only when Type ==
+// "remote". All pairs must match for validation to proceed.
 //
-// Parameters:
-//   - ctx: Context (unused)
-//   - fl: FieldLevel object providing access to the struct field being validated
-//
-// Returns:
-//   - bool: true if nested validation should proceed, false if it should be skipped
-//
-// Panics if the number of parameters is not even (must be pairs of field name and expected value)
-func skipNestedUnlessImpl(_ context.Context, fl validator.FieldLevel) bool {
+// Panics if the number of parameters is not even.
+func stopUnlessImpl(_ context.Context, fl validator.FieldLevel) bool {
 	params := parseOneOfParam2(fl.Param())
 	if len(params)%2 != 0 {
-		panic(fmt.Sprintf("Bad param number for skip_nested_unless %s", fl.FieldName()))
+		panic(fmt.Sprintf("Bad param number for %s %s", fl.GetTag(), fl.FieldName()))
 	}
 	for i := 0; i < len(params); i += 2 {
-		// To skip validation, return false to generate the corresponding error, ensuring the nested struct is not validated.
-		// The corresponding errors should then be filtered out after the StructCtx method returns.
-		// Therefore, this should return false when the condition is not met, preventing further validation.
+		// Returning false is how validation is stopped: it produces an error
+		// that the wrapper then filters out by tag name (see stopTags).
 		if !requireCheckFieldValue(fl, params[i], params[i+1], false) {
 			return false
 		}
@@ -135,7 +142,56 @@ func skipNestedUnlessImpl(_ context.Context, fl validator.FieldLevel) bool {
 	return true
 }
 
-func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
+// stopIfImpl stops validating a field when ANY (field, value) pair matches. It
+// backs the "stop_if" tag.
+//
+// "stop" rather than "skip", because what it stops depends on where the tag
+// sits, and both are the same underlying behaviour — validator abandons a field
+// at its first failing tag:
+//
+//   - on a scalar field, the tags AFTER it do not run;
+//   - on a nested struct, validation does not descend into it.
+//
+// Put it first in the tag list. Parameters are pairs of (field name, value).
+//
+// The motivating case is a cross-field comparison whose right-hand side carries
+// a sentinel. `ltefield=MaxOpenConns` reads as "at most MaxOpenConns", but when
+// MaxOpenConns is 0 meaning UNLIMITED it is not an upper bound at all, and the
+// tag rejects a perfectly good config:
+//
+//	MaxIdleConns int `validate:"stop_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+//	MaxOpenConns int // 0 = unlimited
+//
+// Not to be confused with validator's built-in "skip_unless", which despite its
+// name never skips anything: it returns hasValue(fl), a presence check in the
+// required_* family, and the tags after it still run. No built-in stops
+// validation the way these do, which is why they exist.
+//
+// The names deliberately stay out of the upstream "skip_*" namespace.
+// RegisterValidationCtx silently REPLACES a built-in of the same name and
+// returns nil, so a collision would change behaviour for every consumer with
+// nothing to announce it.
+//
+// Panics if the number of parameters is not even.
+func stopIfImpl(_ context.Context, fl validator.FieldLevel) bool {
+	params := parseOneOfParam2(fl.Param())
+	if len(params)%2 != 0 {
+		panic(fmt.Sprintf("Bad param number for %s %s", fl.GetTag(), fl.FieldName()))
+	}
+	for i := 0; i < len(params); i += 2 {
+		// A missing field is not a match, so a typo'd field name never silently
+		// disables the rules that follow.
+		if requireCheckFieldValue(fl, params[i], params[i+1], false) {
+			return false
+		}
+	}
+	return true
+}
+
+// stopTagsWrapper strips the errors produced by the stop tags. They fail on
+// purpose — that is how validation is halted — so their errors are an
+// implementation detail and must never reach the caller.
+func stopTagsWrapper(next ValidatorFunc) ValidatorFunc {
 	return func(ctx context.Context, v any) error {
 		err := next(ctx, v)
 		if err == nil {
@@ -144,7 +200,7 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 		var verr validator.ValidationErrors
 		if errors.As(err, &verr) {
 			filtered := lo.Filter(verr, func(e validator.FieldError, _ int) bool {
-				return e.Tag() != skipNestedUnlessTag
+				return !lo.Contains(stopTags, e.Tag())
 			})
 			if len(filtered) == 0 {
 				return nil
@@ -155,28 +211,34 @@ func skipNestedUnlessWrapper(next ValidatorFunc) ValidatorFunc {
 	}
 }
 
-// ValidatorWithSkipNestedUnless wraps a validator with support for conditional nested struct validation
-// using the "skip_nested_unless" tag. This allows you to skip validation of nested structs based on
-// the values of other fields in the parent struct.
+// ValidatorWithSkipNestedUnless wraps a validator with support for the
+// conditional "stop" tags, which halt validation of a field based on the values
+// of other fields in the same struct.
 //
-// The wrapper performs two main functions:
-//  1. Registers the "skip_nested_unless" validation tag
-//  2. Filters out validation errors from skipped nested structs
+// The wrapper performs two functions:
+//  1. Registers "stop_if", "stop_unless", and "skip_nested_unless" (a
+//     deprecated alias of stop_unless, kept so existing tags keep working)
+//  2. Filters out their errors, which mean "stop validating here", not "this
+//     value is invalid"
+//
+// The name is historical — it predates stop_if/stop_unless — and is kept
+// because it is part of the public API.
 //
 // Parameters:
-//   - validator: The base validator to wrap with skip_nested_unless support
+//   - validator: The base validator to wrap
 //
 // Returns:
-//   - Validator: A wrapped validator that supports the skip_nested_unless tag
+//   - Validator: A wrapped validator supporting the stop tags
 //
-// Panics if registration of the skip_nested_unless validation fails
+// Panics if registration of any tag fails
 func ValidatorWithSkipNestedUnless(validator Validator) Validator {
-	err := validator.RegisterValidationCtx(skipNestedUnlessTag, skipNestedUnlessImpl)
-	if err != nil {
-		panic(fmt.Sprintf("failed to register validation: %v", err))
+	for tag, impl := range stopTagImpls {
+		if err := validator.RegisterValidationCtx(tag, impl); err != nil {
+			panic(fmt.Sprintf("failed to register validation %q: %v", tag, err))
+		}
 	}
 	return &wrappedValidator{
 		Validator:     validator,
-		structCtxFunc: skipNestedUnlessWrapper(validator.StructCtx),
+		structCtxFunc: stopTagsWrapper(validator.StructCtx),
 	}
 }

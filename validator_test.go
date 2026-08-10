@@ -264,3 +264,141 @@ func TestParseOneOfParam2(t *testing.T) {
 		})
 	}
 }
+
+func TestStopIf(t *testing.T) {
+	// The motivating shape: MaxOpenConns == 0 means UNLIMITED, so it is not an
+	// upper bound and `ltefield` must not run against it.
+	type Pool struct {
+		MaxIdleConns int `validate:"stop_if=MaxOpenConns 0,ltefield=MaxOpenConns"`
+		MaxOpenConns int
+	}
+
+	v := ValidatorWithSkipNestedUnless(
+		validator.New(validator.WithRequiredStructEnabled()),
+	)
+
+	for _, c := range []struct {
+		name       string
+		idle, open int
+		wantTag    string // "" = no error
+	}{
+		{"cap set, idle within it", 20, 200, ""},
+		{"cap set, idle equals it", 10, 10, ""},
+		{"cap set, idle above it", 11, 10, "ltefield"},
+		{"unlimited, idle is not compared", 20, 0, ""},
+		{"unlimited, both zero", 0, 0, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			err := v.StructCtx(context.Background(), Pool{c.idle, c.open})
+			if c.wantTag == "" {
+				assert.NoError(t, err)
+				return
+			}
+			var verr validator.ValidationErrors
+			assert.ErrorAs(t, err, &verr)
+			assert.Len(t, verr, 1)
+			assert.Equal(t, c.wantTag, verr[0].Tag())
+		})
+	}
+}
+
+func TestStopIfDoesNotLeakItsOwnError(t *testing.T) {
+	// stop_if works by failing, which stops the tags after it. That failure is
+	// an implementation detail and must never reach the caller.
+	type S struct {
+		A int `validate:"stop_if=B 0,gte=100"`
+		B int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+
+	// B == 0 → skipped, so A = 1 does not have to be >= 100.
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
+
+	// B != 0 → not skipped, so gte=100 applies and reports itself, not stop_if.
+	err := v.StructCtx(context.Background(), S{A: 1, B: 7})
+	var verr validator.ValidationErrors
+	assert.ErrorAs(t, err, &verr)
+	assert.Len(t, verr, 1)
+	assert.Equal(t, "gte", verr[0].Tag())
+}
+
+func TestStopIfMatchesAnyPair(t *testing.T) {
+	type S struct {
+		A    int `validate:"stop_if=B 0 C 0,gte=100"`
+		B, C int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 0, C: 9}), "B matches")
+	assert.NoError(t, v.StructCtx(context.Background(), S{A: 1, B: 9, C: 0}), "C matches")
+	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 9, C: 9}), "neither matches")
+}
+
+func TestStopIfUnknownFieldDoesNotDisableTheRule(t *testing.T) {
+	// A typo in the field name must not silently switch validation off.
+	type S struct {
+		A int `validate:"stop_if=Nope 0,gte=100"`
+		B int
+	}
+	v := ValidatorWithSkipNestedUnless(validator.New(validator.WithRequiredStructEnabled()))
+	assert.Error(t, v.StructCtx(context.Background(), S{A: 1, B: 0}))
+}
+
+// Guards the reason stop_if / stop_unless exist at all: validator's built-in
+// "skip_unless" does not skip anything despite its name. It returns
+// hasValue(fl) — a presence check in the required_* family — so the tags after
+// it still run. If upstream ever changes that, this test fails and we can
+// reconsider whether stop_if is still needed.
+func TestBuiltinSkipUnlessDoesNotActuallySkip(t *testing.T) {
+	type S struct {
+		A int `validate:"skip_unless=B 0,gte=100"`
+		B int
+	}
+	v := validator.New(validator.WithRequiredStructEnabled())
+
+	// B == 0 matches the condition. If skip_unless skipped, A = 1 would pass.
+	err := v.Struct(S{A: 1, B: 0})
+	var verr validator.ValidationErrors
+	assert.ErrorAs(t, err, &verr)
+	assert.Equal(t, "gte", verr[0].Tag(), "built-in skip_unless is documented as a presence check, not a skip")
+}
+
+// An odd parameter count is a struct-tag typo, and it panics. The message has
+// to name the tag AND the field, otherwise there is nothing to grep for: both
+// stop tags share one message, and a struct may carry several of them.
+func TestStopTagsPanicMessageNamesTagAndField(t *testing.T) {
+	v := newStopValidator()
+
+	t.Run("stop_if", func(t *testing.T) {
+		type S struct {
+			Amount int `validate:"stop_if=Other"` // missing the value half
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for stop_if Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+
+	t.Run("stop_unless", func(t *testing.T) {
+		type S struct {
+			Amount int `validate:"stop_unless=Other"`
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for stop_unless Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+
+	t.Run("the deprecated alias reports its own tag name, not stop_unless", func(t *testing.T) {
+		// fl.GetTag() is what makes this work: the alias shares stop_unless's
+		// implementation, so a hardcoded name would send the reader looking for
+		// a tag that is not in their struct.
+		type S struct {
+			Amount int `validate:"skip_nested_unless=Other"`
+			Other  int
+		}
+		assert.PanicsWithValue(t, "Bad param number for skip_nested_unless Amount", func() {
+			_ = v.StructCtx(context.Background(), S{})
+		})
+	})
+}
