@@ -257,6 +257,27 @@ func TestStringToMapHookFunc(t *testing.T) {
 			expected: nil,
 			wantErr:  `invalid value "abc" for key "b"`,
 		},
+		{
+			name:     "string to struct map via json",
+			input:    `{"a":{"path":"/x","hash":true},"b":{"path":"/y"}}`,
+			to:       map[string]JSONPath{},
+			expected: map[string]JSONPath{"a": {Path: "/x", Hash: true}, "b": {Path: "/y"}},
+			wantErr:  "",
+		},
+		{
+			name:     "empty json object to struct map",
+			input:    `{}`,
+			to:       map[string]JSONPath{},
+			expected: map[string]JSONPath{},
+			wantErr:  "",
+		},
+		{
+			name:     "invalid json for struct map",
+			input:    "not-json",
+			to:       map[string]JSONPath{},
+			expected: nil,
+			wantErr:  "failed to unmarshal json",
+		},
 	}
 
 	for _, tt := range tests {
