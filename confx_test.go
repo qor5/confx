@@ -73,10 +73,12 @@ type ExtraConfig struct {
 	Uint64Slice        []uint64          `confx:"uint64Slice"`
 	Uint8Slice         []uint8           `confx:"uint8Slice"`
 	Bytes              []byte            `confx:"bytes"`
-	StringToString     map[string]string `confx:"stringToString"`
-	StringToInt        map[string]int    `confx:"stringToInt"`
-	StringToInt64      map[string]int64  `confx:"stringToInt64"`
-	EmptyStringToInt64 map[string]int64  `confx:"emptyStringToInt64"`
+	StringToString     map[string]string   `confx:"stringToString"`
+	StringToInt        map[string]int      `confx:"stringToInt"`
+	StringToInt64      map[string]int64    `confx:"stringToInt64"`
+	EmptyStringToInt64 map[string]int64    `confx:"emptyStringToInt64"`
+	StringToStruct     map[string]JSONPath `confx:"stringToStruct"`
+	StringToStructDef  map[string]JSONPath `confx:"stringToStructDef"`
 	BytesForEnv        []byte            `confx:"bytesForEnv"`
 	Time               time.Time         `confx:"time" validate:"required"`
 	StringPtr          *string           `confx:"stringPtr"`
@@ -367,7 +369,13 @@ func TestMapHandling(t *testing.T) {
 			BoolSlice:      []bool{true, false},
 			StringToString: map[string]string{"key1": "value1"},
 			StringToInt:    map[string]int{"key1": 1},
-			Time:           now,
+			StringToStruct: map[string]JSONPath{
+				"default": {Path: "/default", Hash: false},
+			},
+			StringToStructDef: map[string]JSONPath{
+				"keep": {Path: "/keep", Hash: true},
+			},
+			Time: now,
 		},
 	}
 
@@ -380,6 +388,7 @@ func TestMapHandling(t *testing.T) {
 		"--extra-string-to-string=key2=value2",
 		"--extra-string-to-string=key3=value3",
 		"--extra-string-to-int=key2=2,key3=3",
+		`--extra-string-to-struct={"override":{"path":"/override","hash":true}}`,
 	}
 	err = flagSet.Parse(args)
 	require.NoError(t, err)
@@ -398,6 +407,17 @@ func TestMapHandling(t *testing.T) {
 		"key3": 3,
 	}
 	assert.Equal(t, expectedInts, config.Extra.StringToInt)
+
+	// Struct-valued maps are carried as a JSON string flag: an explicit
+	// argument replaces the default map wholesale ...
+	assert.Equal(t, map[string]JSONPath{
+		"override": {Path: "/override", Hash: true},
+	}, config.Extra.StringToStruct)
+	// ... and an untouched flag round-trips the default map through its
+	// JSON representation unchanged.
+	assert.Equal(t, map[string]JSONPath{
+		"keep": {Path: "/keep", Hash: true},
+	}, config.Extra.StringToStructDef)
 }
 
 func TestTimeHandling(t *testing.T) {
